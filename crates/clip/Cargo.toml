@@ -1,0 +1,21 @@
+[package]
+name = "clip"
+description = "Clipboard watcher with change detection and loop protection."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[features]
+default = ["system"]
+# Real system clipboard via arboard (X11/Wayland, macOS, Windows).
+system = ["dep:arboard"]
+
+[dependencies]
+arboard = { workspace = true, optional = true }
+thiserror.workspace = true
+zeroize.workspace = true
+
+[lints]
+workspace = true

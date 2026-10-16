@@ -1,0 +1,18 @@
+[package]
+name = "dataset"
+description = "Labeled dataset format (JSONL/CSV/markup) and evaluation metrics."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+detect.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+csv.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,47 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/detect",
+    "crates/vault",
+    "crates/dataset",
+    "crates/clip",
+    "crates/cli",
+    "crates/app",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "Apache-2.0"
+publish = false
+
+[workspace.dependencies]
+detect = { path = "crates/detect" }
+vault = { path = "crates/vault" }
+dataset = { path = "crates/dataset" }
+clip = { path = "crates/clip" }
+
+regex = { version = "1.11", default-features = false, features = ["std", "perf", "unicode"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+zeroize = "1.8"
+clap = { version = "4.5", features = ["derive"] }
+csv = "1.3"
+toml = { version = "0.9", default-features = false, features = ["parse", "serde", "std"] }
+arboard = { version = "3.4", default-features = false }
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+missing_debug_implementations = "warn"
+
+[workspace.lints.clippy]
+dbg_macro = "warn"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true

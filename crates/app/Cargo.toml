@@ -1,0 +1,20 @@
+[package]
+name = "app"
+description = "Tray / menu-bar application (review mode first). Nothing depends on this crate."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "privatsphaere-app"
+path = "src/main.rs"
+
+[dependencies]
+detect.workspace = true
+vault.workspace = true
+clip.workspace = true
+
+[lints]
+workspace = true

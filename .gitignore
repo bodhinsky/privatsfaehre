@@ -1,0 +1,5 @@
+/target
+# Real (non-synthetic) samples are personal data and must never be committed.
+/dataset/private/*
+!/dataset/private/README.md
+*.local.jsonl
