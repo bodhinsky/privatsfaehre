@@ -34,8 +34,12 @@ struct Cli {
 enum Cmd {
     /// Show what would be redacted or blocked (review-mode preview).
     Scan {
-        /// Input file; stdin if omitted.
+        /// Input file (any supported format: txt, md, pdf, docx, odt, pptx, eml, mbox,
+        /// xlsx, ods, csv, json, html, rtf, …); stdin if omitted.
         file: Option<PathBuf>,
+        /// Column/field holding the text in CSV, spreadsheet and JSON inputs.
+        #[arg(long)]
+        column: Option<String>,
         /// Print JSON instead of the highlighted preview.
         #[arg(long)]
         json: bool,
@@ -45,16 +49,19 @@ enum Cmd {
     },
     /// Interactively label candidate spans and append them to a dataset.
     Label {
-        /// Text inputs: .txt/.md (records separated by `---`, inline [[TYPE|text]] allowed),
-        /// .jsonl with a "text" field, or directories of those.
+        /// Files or directories. .txt/.md: records separated by `---`, inline [[TYPE|text]] allowed.
+        /// Also: pdf, docx, odt, pptx, odp, rtf, html, eml, mbox, xlsx, xls, ods, csv, tsv, json, jsonl.
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
         /// Dataset file to append to.
         #[arg(long, short)]
         dataset: PathBuf,
-        /// Default source label for records without one.
-        #[arg(long, default_value = "unlabeled")]
-        source: String,
+        /// Source label for all records (default: derived from the file format).
+        #[arg(long)]
+        source: Option<String>,
+        /// Column/field holding the text in CSV, spreadsheet and JSON inputs.
+        #[arg(long)]
+        column: Option<String>,
         /// Your name/initials, stored with each record.
         #[arg(long)]
         labeler: Option<String>,
@@ -82,6 +89,9 @@ enum Cmd {
         /// Minimum overlap recall, e.g. HEALTH=0.95 (repeatable).
         #[arg(long, value_parser = parse_target)]
         min_recall: Vec<(EntityType, f64)>,
+        /// TOML file with `[watch_mode.min_recall]` targets (see accuracy-targets.toml).
+        #[arg(long)]
+        targets: Option<PathBuf>,
         /// Number of FP/FN examples to print.
         #[arg(long, default_value_t = 30)]
         errors: usize,
@@ -159,21 +169,35 @@ fn run(cli: Cli) -> Res {
     let color = !cli.no_color && term::color_supported();
     let engine = || config::engine(cli.config.as_deref());
     match cli.cmd {
-        Cmd::Scan { file, json, candidates } => {
-            let mut text = String::new();
-            match file {
-                Some(p) => text = fs::read_to_string(p)?,
+        Cmd::Scan { file, column, json, candidates } => {
+            let texts = match file {
+                Some(p) => inputs::scan_texts(&p, &ingest::Options { column })?,
                 None => {
+                    let mut text = String::new();
                     io::stdin().read_to_string(&mut text)?;
+                    vec![("stdin".to_owned(), text)]
                 }
+            };
+            let engine = engine()?;
+            let mut blocked = false;
+            let many = texts.len() > 1;
+            for (origin, text) in &texts {
+                if many && !json {
+                    println!("\n════ {origin} ════");
+                }
+                blocked |= scan(&engine, text, json, candidates, color)? == Verdict::Block;
             }
-            scan(&engine()?, &text, json, candidates, color)
+            Ok(if blocked { ExitCode::from(4) } else { ExitCode::SUCCESS })
         }
-        Cmd::Label { inputs, dataset: ds, source, labeler, min_score, relabel } => {
-            label::run(&engine()?, &inputs, &ds, &source, labeler, min_score, relabel, color)?;
+        Cmd::Label { inputs, dataset: ds, source, column, labeler, min_score, relabel } => {
+            let opts = ingest::Options { column };
+            label::run(&engine()?, &inputs, &ds, source.as_deref(), &opts, labeler, min_score, relabel, color)?;
             Ok(ExitCode::SUCCESS)
         }
-        Cmd::Eval { paths, json_out, json_errors, compare, min_recall, errors } => {
+        Cmd::Eval { paths, json_out, json_errors, compare, mut min_recall, targets, errors } => {
+            if let Some(t) = targets {
+                min_recall.extend(config::targets(&t)?);
+            }
             let records = dataset::load(&paths)?;
             let mut report = eval::evaluate(&engine()?, &records)?;
             println!("{}", eval::render_text(&report, errors));
@@ -260,7 +284,13 @@ fn run(cli: Cli) -> Res {
     }
 }
 
-fn scan(engine: &detect::Engine, text: &str, json: bool, candidates: bool, color: bool) -> Res {
+fn scan(
+    engine: &detect::Engine,
+    text: &str,
+    json: bool,
+    candidates: bool,
+    color: bool,
+) -> Result<Verdict, Box<dyn std::error::Error>> {
     let analysis = engine.analyze(text)?;
     let verdict = analysis.verdict();
     let mut vault = vault::Vault::new();
@@ -308,8 +338,5 @@ fn scan(engine: &detect::Engine, text: &str, json: bool, candidates: bool, color
             }
         }
     }
-    Ok(match verdict {
-        Verdict::Block => ExitCode::from(4),
-        _ => ExitCode::SUCCESS,
-    })
+    Ok(verdict)
 }

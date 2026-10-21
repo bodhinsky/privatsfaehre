@@ -34,7 +34,9 @@ Gold spans = `accepted` + `corrected` + `added`.
 1. Put raw texts into `dataset/private/raw/` as `.txt` or `.md` files. Several
    texts per file are separated by a line containing only `---`. Optional
    directives at the top of a text: `@source: email`, `@id: …`, `@lang: de`.
-   A `.jsonl` file with a `"text"` field per line also works.
+   Any other supported format works too: PDF, Word, OpenDocument, RTF, HTML,
+   `.eml`/`.mbox`, Excel/ODS, CSV/TSV, JSON/JSONL (one text per row or array
+   element; pick the text column with `--column`).
 2. Label them:
    ```sh
    privatsphaere label dataset/private/raw -d dataset/private/labeled.jsonl --labeler tim

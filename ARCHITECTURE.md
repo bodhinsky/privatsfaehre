@@ -16,7 +16,8 @@ crates/
   vault    placeholder vault, reveal(), zeroization  (independent of detect)
   dataset  JSONL/CSV/markup format, eval metrics     -> detect
   clip     clipboard watcher (arboard backend)
-  cli      `privatsphaere` binary: scan, label, eval -> detect, vault, dataset
+  ingest   text extraction: PDF, Office, ODF, e-mail, spreadsheets, CSV, JSON, HTML, RTF
+  cli      `privatsphaere` binary: scan, label, eval -> detect, vault, dataset, ingest
   app      tray UI (placeholder)                     -> detect, vault, clip
 dataset/   public (synthetic, in CI) and private (git-ignored) samples
 scripts/   check-offline.sh, accuracy-gate.sh
@@ -131,6 +132,17 @@ Implementation notes:
 - Not yet: `mlock` of vault pages, and encrypted persistence. Persistence will
   be opt-in (off by default) using `age` with a passphrase, pure Rust.
 
+## ingest
+
+Turns files into plain text with pure-Rust parsers: `pdf-extract` (text layer
+only, no OCR), `zip` + `quick-xml` for `.docx`/`.pptx`/`.odt`/`.odp` (body,
+headers, footers, footnotes, comments and speaker notes; tracked deletions and
+field codes are skipped), `calamine` for spreadsheets, `mail-parser` for
+`.eml`/`.mbox` (address headers are kept because they are personal data), and
+small built-in converters for HTML and RTF. Each format is a cargo feature, so
+the app can leave out what it does not need. Tabular inputs yield one text per
+row. The offline check covers this crate's whole dependency tree.
+
 ## clip
 
 Polling watcher over a `ClipboardBackend` trait with change detection and loop
@@ -159,7 +171,7 @@ libappindicator on Linux.
   window; nothing is replaced without confirmation.
 - Watch mode (automatic replacement) can only be turned on once `eval` metrics
   on the full dataset meet targets the maintainer sets (for example
-  `--min-recall HEALTH=0.98`). The targets and the report the build was checked
+  `--min-recall HEALTH=0.98`), kept in `accuracy-targets.toml`. The targets and the report the build was checked
   against will be embedded at build time.
 
 ## Audit log (planned)

@@ -1,0 +1,6 @@
+# Targets that must be met on the full dataset (dataset/public + dataset/private)
+# before watch mode (automatic clipboard replacement) may be enabled.
+# Check with: privatsphaere eval dataset/public dataset/private --targets accuracy-targets.toml
+
+[watch_mode.min_recall]
+HEALTH = 0.98

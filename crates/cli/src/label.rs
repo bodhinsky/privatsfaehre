@@ -236,7 +236,8 @@ pub fn run(
     engine: &Engine,
     inputs: &[PathBuf],
     dataset_path: &Path,
-    source: &str,
+    source: Option<&str>,
+    opts: &ingest::Options,
     labeler: Option<String>,
     min_score: f32,
     relabel: bool,
@@ -248,7 +249,7 @@ pub fn run(
         HashSet::new()
     };
     let todo: Vec<Record> =
-        crate::inputs::load(inputs, source)?.into_iter().filter(|r| !done.contains(&r.id)).collect();
+        crate::inputs::load(inputs, source, opts)?.into_iter().filter(|r| !done.contains(&r.id)).collect();
     if todo.is_empty() {
         println!("Nothing to label ({} already in {}).", done.len(), dataset_path.display());
         return Ok(());
