@@ -67,6 +67,31 @@ $B eval dataset/public dataset/private --min-recall HEALTH=0.95
 [privatsphaere.example.toml](privatsphaere.example.toml); special categories
 cannot be configured.
 
+## Clipboard guard
+
+```sh
+$B guard                                 # review mode, in a terminal next to your browser
+$B guard --audit-log ~/privatsphaere-audit.jsonl
+```
+
+`guard` watches the clipboard. When copied text contains personal data or
+secrets, it beeps, shows the findings and the pseudonymized version, and only
+replaces the clipboard after you confirm (Enter). Typing numbers such as `2,4`
+toggles single findings. Text with GDPR Art. 9/10 data is replaced by a notice
+right away, without asking, and this cannot be overridden; the same happens
+when detection fails. When you copy an LLM answer that contains placeholders
+from this session, `guard` offers to restore the originals (default: no, so a
+pseudonymized text on its way back into a chat is not revealed by accident).
+The vault exists only in memory and is wiped when `guard` exits or on `c`.
+
+The audit log is off by default. When enabled it stores, per decision, the
+time, the action, the number of findings per type, rule ids and the text
+length, never the values themselves or hashes of them.
+
+On Linux (X11) a pseudonymized clipboard is owned by the `guard` process and
+is gone once `guard` exits. A tray app is planned; until then the terminal is
+the review window.
+
 ## Supported input formats
 
 `scan` and `label` read plain text and Markdown, PDF (text layer, no OCR),
@@ -190,6 +215,33 @@ $B eval dataset/public dataset/private --min-recall HEALTH=0.95
 (Schwellenwerte, Allowlist, Denylist) ist in
 [privatsphaere.example.toml](privatsphaere.example.toml) beschrieben;
 besondere Kategorien sind nicht konfigurierbar.
+
+## Zwischenablage-Wächter
+
+```sh
+$B guard                                 # Prüfmodus, im Terminal neben dem Browser
+$B guard --audit-log ~/privatsphaere-audit.jsonl
+```
+
+`guard` überwacht die Zwischenablage. Enthält kopierter Text personenbezogene
+Daten oder Geheimnisse, piept es, zeigt die Funde und die pseudonymisierte
+Fassung und ersetzt die Zwischenablage erst nach Bestätigung (Enter). Mit
+Nummern wie `2,4` lassen sich einzelne Funde an- und abwählen. Text mit Daten
+nach Art. 9/10 DSGVO wird sofort und ohne Rückfrage durch einen Hinweis
+ersetzt; das lässt sich nicht übersteuern. Dasselbe passiert, wenn die
+Erkennung fehlschlägt. Kopieren Sie eine LLM-Antwort mit Platzhaltern aus
+dieser Sitzung, bietet `guard` an, die Originale wiederherzustellen (Vorgabe:
+nein, damit ein pseudonymisierter Text auf dem Weg zurück in einen Chat nicht
+versehentlich aufgedeckt wird). Der Tresor existiert nur im Arbeitsspeicher und
+wird beim Beenden oder mit `c` gelöscht.
+
+Das Audit-Log ist standardmäßig aus. Eingeschaltet speichert es pro
+Entscheidung Zeit, Aktion, Anzahl der Funde je Typ, Regel-IDs und Textlänge,
+niemals die Werte selbst oder Hashes davon.
+
+Unter Linux (X11) gehört eine pseudonymisierte Zwischenablage dem
+`guard`-Prozess und ist nach dessen Ende leer. Eine Tray-App ist geplant; bis
+dahin ist das Terminal das Prüffenster.
 
 ## Unterstützte Eingabeformate
 

@@ -1,6 +1,8 @@
 //! `privatsphaere` command-line tool.
 
+mod audit;
 mod config;
+mod guard;
 mod inputs;
 mod label;
 mod term;
@@ -12,6 +14,7 @@ use std::fs;
 use std::io::{self, Read};
 use std::path::PathBuf;
 use std::process::ExitCode;
+use std::time::Duration;
 
 #[derive(Parser)]
 #[command(
@@ -32,6 +35,19 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
+    /// Watch the clipboard and pseudonymize it after confirmation (review mode).
+    ///
+    /// Special-category data (GDPR Art. 9/10) is replaced by a notice without
+    /// asking. Copied text with placeholders from this session can be restored.
+    /// The vault lives in memory only and is wiped on exit.
+    Guard {
+        /// Polling interval in milliseconds.
+        #[arg(long, default_value_t = 250)]
+        interval_ms: u64,
+        /// Append decisions to this local JSONL file (never original values).
+        #[arg(long)]
+        audit_log: Option<PathBuf>,
+    },
     /// Show what would be redacted or blocked (review-mode preview).
     Scan {
         /// Input file (any supported format: txt, md, pdf, docx, odt, pptx, eml, mbox,
@@ -169,6 +185,21 @@ fn run(cli: Cli) -> Res {
     let color = !cli.no_color && term::color_supported();
     let engine = || config::engine(cli.config.as_deref());
     match cli.cmd {
+        Cmd::Guard { interval_ms, audit_log } => {
+            let engine = engine()?;
+            let watcher = clip::Watcher::new(clip::SystemClipboard::new()?)?;
+            let mut g = guard::Guard {
+                engine: &engine,
+                watcher,
+                console: guard::Terminal::new(),
+                vault: vault::Vault::new(),
+                audit: audit_log.as_deref().map(audit::AuditLog::open).transpose()?,
+                color,
+                interval: Duration::from_millis(interval_ms.max(50)),
+            };
+            g.run()?;
+            Ok(ExitCode::SUCCESS)
+        }
         Cmd::Scan { file, column, json, candidates } => {
             let texts = match file {
                 Some(p) => inputs::scan_texts(&p, &ingest::Options { column })?,

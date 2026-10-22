@@ -17,7 +17,7 @@ crates/
   dataset  JSONL/CSV/markup format, eval metrics     -> detect
   clip     clipboard watcher (arboard backend)
   ingest   text extraction: PDF, Office, ODF, e-mail, spreadsheets, CSV, JSON, HTML, RTF
-  cli      `privatsphaere` binary: scan, label, eval -> detect, vault, dataset, ingest
+  cli      `privatsphaere` binary: guard, scan, label, eval -> detect, vault, dataset, ingest, clip
   app      tray UI (placeholder)                     -> detect, vault, clip
 dataset/   public (synthetic, in CI) and private (git-ignored) samples
 scripts/   check-offline.sh, accuracy-gate.sh
@@ -174,10 +174,22 @@ libappindicator on Linux.
   `--min-recall HEALTH=0.98`), kept in `accuracy-targets.toml`. The targets and the report the build was checked
   against will be embedded at build time.
 
-## Audit log (planned)
+## guard (terminal review mode)
 
-Opt-in, local JSONL: timestamp, action (redacted, blocked, revealed, allowed),
-counts per entity type, rule ids, text length. Never original values, and no
+`privatsphaere guard` runs the data flow above in a terminal until the tray
+app exists. Stdin is read on a background thread, so commands (`r` reveal,
+`c` clear vault, `s` status, `q` quit) work while the clipboard is polled.
+Findings are pseudonymized into the vault for the preview; if the user
+declines, `Vault::rollback` removes those entries again. Writes use
+`Watcher::replace_if_current`, so a confirmation never overwrites something the
+user copied while the prompt was open. Reveal is offered automatically for
+copied text with this session's placeholders, defaulting to no.
+
+## Audit log
+
+Opt-in (`guard --audit-log FILE`), local JSONL: timestamp, action (redacted,
+blocked, revealed, allowed, error), counts per entity type, rule ids, text
+length. Never original values, and no
 hashes of values either, since hashes of short values like phone numbers can
 be reversed by brute force.
 

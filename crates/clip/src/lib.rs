@@ -81,6 +81,18 @@ impl<B: ClipboardBackend> Watcher<B> {
         Ok(())
     }
 
+    /// Like [`Watcher::replace`], but only if the clipboard still holds
+    /// `current`. Returns `false` (and writes nothing) if the user copied
+    /// something else in the meantime; the next poll reports that change.
+    pub fn replace_if_current(&mut self, current: &str, text: &str) -> Result<bool, ClipError> {
+        let now = self.backend.read_text()?;
+        if now.as_deref().map(|t| t.as_str()) != Some(current) {
+            return Ok(false);
+        }
+        self.replace(text)?;
+        Ok(true)
+    }
+
     pub fn backend_mut(&mut self) -> &mut B {
         &mut self.backend
     }
@@ -151,6 +163,14 @@ mod tests {
         w.replace("IBAN [IBAN_1]").unwrap();
         assert!(w.poll().unwrap().is_none(), "own write is ignored");
 
+        w.backend_mut().content = Some("neu".into());
+        assert!(w.poll().unwrap().is_some());
+
+        // Not overwritten when the user copied something else meanwhile.
+        assert!(!w.replace_if_current("alt", "[X_1]").unwrap());
+        assert_eq!(w.backend_mut().content.as_deref(), Some("neu"));
+        assert!(w.replace_if_current("neu", "[X_1]").unwrap());
+        assert!(w.poll().unwrap().is_none());
         w.backend_mut().content = Some("neu".into());
         assert!(w.poll().unwrap().is_some());
 

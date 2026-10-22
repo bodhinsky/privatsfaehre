@@ -1,6 +1,6 @@
 [package]
 name = "cli"
-description = "Command-line interface: scan, label, eval and dataset tools."
+description = "Command-line interface: clipboard guard, scan, label, eval and dataset tools."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -16,6 +16,7 @@ detect.workspace = true
 vault.workspace = true
 dataset.workspace = true
 ingest.workspace = true
+clip.workspace = true
 clap.workspace = true
 serde.workspace = true
 serde_json.workspace = true
