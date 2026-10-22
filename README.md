@@ -67,6 +67,17 @@ $B eval dataset/public dataset/private --min-recall HEALTH=0.95
 [privatsphaere.example.toml](privatsphaere.example.toml); special categories
 cannot be configured.
 
+## Supported input formats
+
+`scan` and `label` read plain text and Markdown, PDF (text layer, no OCR),
+Word (`.docx`), PowerPoint (`.pptx`), OpenDocument (`.odt`, `.odp`), RTF,
+HTML, e-mail (`.eml`, `.mbox`, including From/To/Cc/Subject headers), Excel
+and OpenDocument spreadsheets (`.xlsx`, `.xlsm`, `.xls`, `.ods`), CSV/TSV
+(`;` is detected automatically), JSON and JSON Lines. Tables and JSON arrays
+become one text per row: the column named like `text`, `body`, `nachricht`,
+`inhalt`, … is used, or `--column NAME`; without one, all cells of a row are
+joined as `header: value` lines. All parsing is pure Rust and offline.
+
 ## Accuracy process
 
 1. `label`: shows every candidate from every recognizer; you accept, reject or
@@ -82,6 +93,10 @@ cannot be configured.
    on `dataset/public` (base code and PR code are evaluated on the same data)
    or removes special-category examples (`scripts/accuracy-gate.sh`).
 
+Watch mode may only be enabled once the targets in
+[accuracy-targets.toml](accuracy-targets.toml) are met on the full dataset
+(currently HEALTH recall ≥ 0.98): `privatsphaere eval dataset/public dataset/private --targets accuracy-targets.toml`.
+
 ## Workspace
 
 | Crate | Purpose |
@@ -90,6 +105,7 @@ cannot be configured.
 | `vault` | placeholders, `reveal()`, zeroization |
 | `dataset` | JSONL/CSV/markup format, eval metrics |
 | `clip` | clipboard watcher |
+| `ingest` | text extraction from PDF, Office, e-mail, spreadsheets, CSV, JSON, HTML, RTF |
 | `cli` | `privatsphaere` binary |
 | `app` | tray UI (not yet implemented); nothing depends on it |
 
@@ -175,6 +191,18 @@ $B eval dataset/public dataset/private --min-recall HEALTH=0.95
 [privatsphaere.example.toml](privatsphaere.example.toml) beschrieben;
 besondere Kategorien sind nicht konfigurierbar.
 
+## Unterstützte Eingabeformate
+
+`scan` und `label` lesen Text und Markdown, PDF (Textebene, keine
+Texterkennung), Word (`.docx`), PowerPoint (`.pptx`), OpenDocument (`.odt`,
+`.odp`), RTF, HTML, E-Mails (`.eml`, `.mbox`, inklusive Von/An/Cc/Betreff),
+Excel- und OpenDocument-Tabellen (`.xlsx`, `.xlsm`, `.xls`, `.ods`), CSV/TSV
+(`;` wird automatisch erkannt), JSON und JSON Lines. Tabellen und JSON-Arrays
+ergeben einen Text pro Zeile: verwendet wird die Spalte namens `text`,
+`body`, `nachricht`, `inhalt` usw. oder `--column NAME`; gibt es keine, werden
+alle Zellen einer Zeile als `Spalte: Wert` zusammengefügt. Alles wird rein in
+Rust und offline verarbeitet.
+
 ## Vorgehen zur Erkennungsgenauigkeit
 
 1. `label`: zeigt jeden Kandidaten jedes Erkenners; du akzeptierst, verwirfst
@@ -190,6 +218,10 @@ besondere Kategorien sind nicht konfigurierbar.
    Art.-9/10-Kategorie auf `dataset/public` senkt (alter und neuer Code werden
    auf denselben Daten gemessen) oder Beispiele besonderer Kategorien entfernt
    (`scripts/accuracy-gate.sh`).
+
+Der Watch-Modus darf erst eingeschaltet werden, wenn die Ziele in
+[accuracy-targets.toml](accuracy-targets.toml) auf dem gesamten Datensatz
+erreicht sind (derzeit HEALTH-Recall ≥ 0,98).
 
 ## Lizenz
 

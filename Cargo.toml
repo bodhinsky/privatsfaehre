@@ -5,6 +5,7 @@ members = [
     "crates/vault",
     "crates/dataset",
     "crates/clip",
+    "crates/ingest",
     "crates/cli",
     "crates/app",
 ]
@@ -21,6 +22,7 @@ detect = { path = "crates/detect" }
 vault = { path = "crates/vault" }
 dataset = { path = "crates/dataset" }
 clip = { path = "crates/clip" }
+ingest = { path = "crates/ingest" }
 
 regex = { version = "1.11", default-features = false, features = ["std", "perf", "unicode"] }
 serde = { version = "1", features = ["derive"] }

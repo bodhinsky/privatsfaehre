@@ -30,7 +30,7 @@ for c in "${BANNED[@]}"; do
   fi
 done
 
-for member in detect vault dataset clip cli; do
+for member in detect vault dataset clip ingest cli; do
   member_deps=$(cargo tree -p "$member" --all-features --target all -e normal,build,dev --prefix none --format '{p}' \
     | awk '{print $1}' | sort -u)
   for ui in "${UI_CRATES[@]}"; do
