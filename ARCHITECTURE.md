@@ -1,5 +1,8 @@
 # Architecture
 
+UML diagrams of the components, core classes and the clipboard flow are in
+[`docs/architecture/`](docs/architecture/README.md).
+
 ## Goals and constraints
 
 - Local only: no network code, no telemetry, no update checks. Enforced in CI (`scripts/check-offline.sh`).
