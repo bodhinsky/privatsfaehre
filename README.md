@@ -9,7 +9,8 @@ locally. Text containing GDPR Art. 9/10 data is blocked, not redacted.
 [Deutsche Version weiter unten](#deutsch)
 
 > **Status: pre-alpha.** The detection engine, vault and the `label`/`eval`
-> tooling work. The tray app does not exist yet. Automatic replacement
+> tooling work, and so does review mode in the terminal (`guard`) and in the
+> desktop app (`privatsphaere-app`). Automatic replacement
 > ("watch mode") stays disabled until detection has been validated on real,
 > labeled data.
 
@@ -89,8 +90,29 @@ time, the action, the number of findings per type, rule ids and the text
 length, never the values themselves or hashes of them.
 
 On Linux (X11) a pseudonymized clipboard is owned by the `guard` process and
-is gone once `guard` exits. A tray app is planned; until then the terminal is
-the review window.
+is gone once `guard` exits.
+
+## Desktop app
+
+```sh
+cargo build --release -p app
+target/release/privatsphaere-app [--config privatsphaere.toml] [--audit-log FILE]
+```
+
+The same review mode as `guard`, with a window and a tray icon. When the
+clipboard has findings, the window comes to the front with the copied text
+(findings highlighted, one checkbox each) and the pseudonymized version;
+Enter pseudonymizes, Esc keeps the original. Blocked text is shown with the
+special-category terms marked in red while the clipboard already holds the
+notice. Reveal needs a click; Enter does not reveal. Closing the window keeps
+the app running in the tray (menu: show window, reveal clipboard, clear vault,
+quit). The UI is German, or English when the locale is not German.
+
+Linux needs GTK 3 and libayatana-appindicator for the tray icon
+(`libgtk-3-dev libxdo-dev libayatana-appindicator3-dev` to build); build with
+`--no-default-features` for a window without a tray. On GNOME the icon only
+appears with the AppIndicator extension. Without a tray, closing the window
+quits.
 
 ## Supported input formats
 
@@ -131,8 +153,9 @@ Watch mode may only be enabled once the targets in
 | `dataset` | JSONL/CSV/markup format, eval metrics |
 | `clip` | clipboard watcher |
 | `ingest` | text extraction from PDF, Office, e-mail, spreadsheets, CSV, JSON, HTML, RTF |
+| `session` | review-mode rules shared by `guard` and the app, audit log |
 | `cli` | `privatsphaere` binary |
-| `app` | tray UI (not yet implemented); nothing depends on it |
+| `app` | `privatsphaere-app` desktop window and tray icon; nothing depends on it |
 
 ## License
 
@@ -153,7 +176,8 @@ werden kann. Texte mit Daten nach Art. 9/10 DSGVO werden blockiert, nicht
 geschwärzt.
 
 > **Status: Pre-Alpha.** Erkennungs-Engine, Tresor sowie die Werkzeuge
-> `label` und `eval` funktionieren. Die Tray-App gibt es noch nicht. Das
+> `label` und `eval` funktionieren, ebenso der Prüfmodus im Terminal
+> (`guard`) und in der Desktop-App (`privatsphaere-app`). Das
 > automatische Ersetzen („Watch-Modus“) bleibt abgeschaltet, bis die Erkennung
 > an echten, gelabelten Daten validiert ist.
 
@@ -240,8 +264,30 @@ Entscheidung Zeit, Aktion, Anzahl der Funde je Typ, Regel-IDs und Textlänge,
 niemals die Werte selbst oder Hashes davon.
 
 Unter Linux (X11) gehört eine pseudonymisierte Zwischenablage dem
-`guard`-Prozess und ist nach dessen Ende leer. Eine Tray-App ist geplant; bis
-dahin ist das Terminal das Prüffenster.
+`guard`-Prozess und ist nach dessen Ende leer.
+
+## Desktop-App
+
+```sh
+cargo build --release -p app
+target/release/privatsphaere-app [--config privatsphaere.toml] [--audit-log DATEI]
+```
+
+Derselbe Prüfmodus wie `guard`, mit Fenster und Tray-Symbol. Hat die
+Zwischenablage Funde, kommt das Fenster nach vorne und zeigt den kopierten Text
+(Funde markiert, je eine Checkbox) und die pseudonymisierte Fassung; Enter
+pseudonymisiert, Esc behält das Original. Blockierter Text wird mit rot
+markierten Begriffen der besonderen Kategorien angezeigt, während die
+Zwischenablage bereits den Hinweis enthält. Aufdecken braucht einen Klick;
+Enter deckt nicht auf. Schließen des Fensters lässt die App im Tray weiterlaufen
+(Menü: Fenster zeigen, Zwischenablage aufdecken, Tresor leeren, Beenden). Die
+Oberfläche ist deutsch, bei nicht-deutscher Spracheinstellung englisch.
+
+Unter Linux braucht das Tray-Symbol GTK 3 und libayatana-appindicator (zum
+Bauen `libgtk-3-dev libxdo-dev libayatana-appindicator3-dev`); mit
+`--no-default-features` entsteht ein Fenster ohne Tray. Unter GNOME erscheint
+das Symbol nur mit der AppIndicator-Erweiterung. Ohne Tray beendet das
+Schließen des Fensters die App.
 
 ## Unterstützte Eingabeformate
 
