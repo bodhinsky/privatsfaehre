@@ -307,6 +307,26 @@ impl Vault {
         Revealed { text: out, restored: hits.len(), unknown }
     }
 
+    /// Forget every value added after `mark` (a previous [`Vault::len`]), so
+    /// a preview the user declined leaves no originals behind and does not
+    /// use up placeholder numbers.
+    pub fn rollback(&mut self, mark: usize) {
+        while self.entries.len() > mark {
+            let Some(e) = self.entries.pop() else { break };
+            self.by_token.remove(&e.token.to_ascii_uppercase());
+            let i = self.entries.len();
+            self.by_value.retain(|_, v| *v != i);
+            // Tokens are `[KIND_n]` and the newest entry of a kind has the highest n.
+            let kind = &e.token[1..e.token.rfind('_').unwrap_or(1)];
+            if let Some(n) = self.counters.get_mut(kind) {
+                *n -= 1;
+                if *n == 0 {
+                    self.counters.remove(kind);
+                }
+            }
+        }
+    }
+
     /// Wipe and forget all values. Counters restart at 1.
     pub fn clear(&mut self) {
         // Dropping the entries zeroizes every SecretString.
@@ -335,6 +355,22 @@ mod tests {
                 Span { start, end: from, kind }
             })
             .collect()
+    }
+
+    #[test]
+    fn rollback_forgets_declined_preview() {
+        let mut v = Vault::new();
+        v.placeholder("PERSON", "Anna Schmidt").unwrap();
+        let mark = v.len();
+        v.placeholder("PERSON", "Jonas Weber").unwrap();
+        v.placeholder("IBAN", "DE89370400440532013000").unwrap();
+        v.rollback(mark);
+        assert_eq!(v.len(), 1);
+        assert_eq!(v.lookup("[PERSON_2]"), None);
+        assert_eq!(v.lookup("[IBAN_1]"), None);
+        assert_eq!(v.placeholder("PERSON", "anna  schmidt").unwrap(), "[PERSON_1]");
+        assert_eq!(v.placeholder("PERSON", "Lea Wolf").unwrap(), "[PERSON_2]", "numbers are reused");
+        assert_eq!(v.placeholder("IBAN", "DE02120300000000202051").unwrap(), "[IBAN_1]");
     }
 
     #[test]
