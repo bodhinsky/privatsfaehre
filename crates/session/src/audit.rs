@@ -5,7 +5,6 @@
 //! are hashes of them: hashes of short values such as phone numbers can be
 //! reversed by brute force.
 
-use crate::term;
 use detect::Detection;
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
@@ -39,6 +38,7 @@ struct Line<'a> {
     restored: Option<usize>,
 }
 
+#[derive(Debug)]
 pub struct AuditLog {
     file: File,
 }
@@ -61,12 +61,12 @@ impl AuditLog {
             *entities.entry(d.entity.as_str()).or_insert(0) += 1;
             rules.insert(d.recognizer.as_ref());
         }
-        self.write(&Line { ts: term::now_rfc3339(), action, entities, rules, chars, restored: None })
+        self.write(&Line { ts: crate::now_rfc3339(), action, entities, rules, chars, restored: None })
     }
 
     pub fn revealed(&mut self, restored: usize, chars: usize) -> io::Result<()> {
         let line = Line {
-            ts: term::now_rfc3339(),
+            ts: crate::now_rfc3339(),
             action: Action::Revealed,
             entities: BTreeMap::new(),
             rules: BTreeSet::new(),

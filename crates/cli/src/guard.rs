@@ -1,29 +1,18 @@
 //! `guard`: clipboard guard in review mode, in the terminal.
 //!
-//! Every clipboard change is analysed. Findings are shown and the clipboard
-//! is only replaced with the pseudonymized text after confirmation.
-//! Special-category data (GDPR Art. 9/10) and detection errors replace the
-//! clipboard with a notice right away, without asking. Text that contains
-//! placeholders issued in this session can be restored ("reveal").
-//!
-//! The vault lives in memory for the lifetime of the command and is wiped on
-//! exit or with the `c` command.
+//! A terminal front end for [`session::Session`], which makes the decisions:
+//! findings are only pseudonymized after confirmation, special-category data
+//! (GDPR Art. 9/10) and detection errors replace the clipboard with a notice
+//! right away, and copied text with this session's placeholders can be
+//! restored ("reveal"). The vault is wiped on exit or with `c`.
 
-use crate::audit::{Action, AuditLog};
 use crate::term::{self, Mark};
-use clip::{ClipError, ClipboardBackend, Watcher};
-use detect::{Detection, Engine, Verdict};
-use std::collections::BTreeSet;
+use clip::{ClipError, ClipboardBackend};
+use session::{Event, Outcome, RevealOffer, Review, Session};
 use std::io::{self, BufRead, Write};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::time::Duration;
 use vault::zeroize::Zeroizing;
-use vault::{RevealMode, Vault};
-
-pub const BLOCK_NOTICE: &str = "⛔ privatsphaere: Inhalt blockiert, enthält besondere Kategorien personenbezogener \
-Daten (Art. 9/10 DSGVO). Content blocked: special-category personal data (GDPR Art. 9/10).";
-pub const ERROR_NOTICE: &str = "⛔ privatsphaere: Inhalt blockiert, Prüfung fehlgeschlagen. \
-Content blocked: detection failed.";
 
 /// Terminal input and output, abstracted so sessions can be scripted in tests.
 pub trait Console {
@@ -85,12 +74,9 @@ impl Console for Terminal {
 
 const HELP: &str = "Commands: r = reveal clipboard now   c = clear vault   s = status   h = help   q = quit";
 
-pub struct Guard<'a, B, C> {
-    pub engine: &'a Engine,
-    pub watcher: Watcher<B>,
+pub struct Guard<B, C> {
+    pub session: Session<B>,
     pub console: C,
-    pub vault: Vault,
-    pub audit: Option<AuditLog>,
     pub color: bool,
     pub interval: Duration,
 }
@@ -103,7 +89,11 @@ enum Flow {
 
 type Res<T> = Result<T, Box<dyn std::error::Error>>;
 
-impl<B: ClipboardBackend, C: Console> Guard<'_, B, C> {
+fn is_yes(a: &str) -> bool {
+    matches!(a, "y" | "Y" | "j" | "J" | "yes" | "ja")
+}
+
+impl<B: ClipboardBackend, C: Console> Guard<B, C> {
     pub fn run(&mut self) -> Res<()> {
         self.console.say("Watching the clipboard (review mode). Nothing leaves this machine.");
         self.console.say(HELP);
@@ -118,10 +108,10 @@ impl<B: ClipboardBackend, C: Console> Guard<'_, B, C> {
                 Input::Closed => break,
                 Input::Timeout => {}
             }
-            match self.watcher.poll() {
+            match self.session.poll() {
                 Ok(Some(ev)) => {
                     last_error = None;
-                    if self.handle(&ev.text)? == Flow::Quit {
+                    if self.handle(ev)? == Flow::Quit {
                         break;
                     }
                 }
@@ -135,8 +125,11 @@ impl<B: ClipboardBackend, C: Console> Guard<'_, B, C> {
                     }
                 }
             }
+            for w in self.session.take_warnings() {
+                self.console.say(&format!("⚠ {w}"));
+            }
         }
-        self.vault.clear();
+        self.session.clear_vault();
         self.console.say("Vault wiped. Bye.");
         Ok(())
     }
@@ -149,20 +142,12 @@ impl<B: ClipboardBackend, C: Console> Guard<'_, B, C> {
         }
     }
 
-    fn audit<'d>(&mut self, action: Action, dets: impl IntoIterator<Item = &'d Detection>, chars: usize) {
-        if let Some(log) = &mut self.audit
-            && let Err(e) = log.record(action, dets, chars)
-        {
-            self.console.say(&format!("⚠ audit log: {e}"));
+    fn report(&mut self, outcome: Outcome, done: &str) {
+        match outcome {
+            Outcome::Replaced => self.console.say(done),
+            Outcome::ChangedMeanwhile => self.console.say("  Clipboard changed in the meantime; left it alone."),
+            Outcome::Unchanged => self.console.say("  Nothing to do; clipboard unchanged."),
         }
-    }
-
-    fn write(&mut self, current: &str, text: &str) -> Result<bool, ClipError> {
-        let done = self.watcher.replace_if_current(current, text)?;
-        if !done {
-            self.console.say("  Clipboard changed in the meantime; left it alone.");
-        }
-        Ok(done)
     }
 
     fn command(&mut self, cmd: &str) -> Res<Flow> {
@@ -171,19 +156,16 @@ impl<B: ClipboardBackend, C: Console> Guard<'_, B, C> {
             "q" | "quit" | "exit" => return Ok(Flow::Quit),
             "h" | "help" | "?" => self.console.say(HELP),
             "s" | "status" => {
-                let n = self.vault.len();
-                let audit = if self.audit.is_some() { "on" } else { "off" };
+                let n = self.session.vault_len();
+                let audit = if self.session.audit_enabled() { "on" } else { "off" };
                 self.console.say(&format!("{n} placeholders in the vault; audit log {audit}; review mode."));
             }
             "c" | "clear" => {
-                self.vault.clear();
+                self.session.clear_vault();
                 self.console.say("Vault wiped; placeholders issued so far can no longer be revealed.");
             }
-            "r" | "reveal" => match self.watcher.backend_mut().read_text()? {
-                Some(text) => {
-                    let r = self.vault.reveal_with(&text, RevealMode::Lenient);
-                    self.reveal(&text, r, false)?;
-                }
+            "r" | "reveal" => match self.session.reveal_clipboard()? {
+                Some(o) => self.reveal(&o, false)?,
                 None => self.console.say("Clipboard holds no text."),
             },
             other => self.console.say(&format!("Unknown command `{other}`. {HELP}")),
@@ -191,160 +173,109 @@ impl<B: ClipboardBackend, C: Console> Guard<'_, B, C> {
         Ok(Flow::Continue)
     }
 
-    fn reveal(&mut self, text: &str, r: vault::Revealed, ask: bool) -> Res<()> {
-        if !r.unknown.is_empty() {
-            self.console.say(&format!("  Not from this session: {}", r.unknown.join(", ")));
+    fn reveal(&mut self, o: &RevealOffer, ask: bool) -> Result<(), ClipError> {
+        if !o.unknown().is_empty() {
+            self.console.say(&format!("  Not from this session: {}", o.unknown().join(", ")));
         }
-        if r.restored == 0 {
+        if o.restored() == 0 {
             self.console.say("  No placeholders from this session found.");
             return Ok(());
         }
         if ask {
             self.console.bell();
-            self.console.say(&format!("\n↩ Copied text contains {} placeholder(s) from this session.", r.restored));
+            self.console.say(&format!("\n↩ Copied text contains {} placeholder(s) from this session.", o.restored()));
             // Default no: the text might be on its way back into a chat.
             let a = self.ask("  Restore the originals into the clipboard? [y/N]").unwrap_or_default();
-            if !matches!(a.as_str(), "y" | "Y" | "j" | "J" | "yes" | "ja") {
+            if !is_yes(&a) {
                 self.console.say("  Left as is.");
                 return Ok(());
             }
         }
-        if self.write(text, &r.text)? {
-            self.console.say(&format!("  ✓ Restored {} placeholder(s). Only paste this locally.", r.restored));
-            if let Some(log) = &mut self.audit
-                && let Err(e) = log.revealed(r.restored, text.chars().count())
-            {
-                self.console.say(&format!("⚠ audit log: {e}"));
-            }
-        }
+        let outcome = self.session.accept_reveal(o)?;
+        self.report(outcome, &format!("  ✓ Restored {} placeholder(s). Only paste this locally.", o.restored()));
         Ok(())
     }
 
-    fn handle(&mut self, text: &str) -> Res<Flow> {
-        let chars = text.chars().count();
-        if !self.vault.is_empty() {
-            let r = self.vault.reveal(text);
-            if r.restored > 0 {
-                self.reveal(text, r, true)?;
-                return Ok(Flow::Continue);
-            }
-        }
-        let analysis = match self.engine.analyze(text) {
-            Ok(a) => a,
-            Err(e) => {
-                // Fail closed.
-                self.write(text, ERROR_NOTICE)?;
+    fn handle(&mut self, ev: Event) -> Res<Flow> {
+        match ev {
+            Event::Clean { chars } => self.console.say(&format!("✓ clean ({chars} chars)")),
+            Event::Failed { error } => {
                 self.console.bell();
-                self.console.say(&format!("\n⛔ Detection failed ({e}); clipboard replaced with a notice."));
-                self.audit(Action::Error, [], chars);
-                return Ok(Flow::Continue);
+                self.console.say(&format!("\n⛔ Detection failed ({error}); clipboard replaced with a notice."));
             }
-        };
-        match analysis.verdict() {
-            Verdict::Clean => {
-                self.console.say(&format!("✓ clean ({chars} chars)"));
-            }
-            Verdict::Block => {
-                self.write(text, BLOCK_NOTICE)?;
+            Event::Blocked(b) => {
                 self.console.bell();
-                let mut marks: Vec<Mark> = analysis.blocking.iter().map(|d| Mark::new(d.start, d.end, true)).collect();
-                marks.extend(analysis.detections.iter().map(|d| Mark::new(d.start, d.end, false)));
-                let shown = Zeroizing::new(term::highlight(text, &marks, self.color));
+                let mut marks: Vec<Mark> = b.blocking.iter().map(|d| Mark::new(d.start, d.end, true)).collect();
+                marks.extend(b.detections.iter().map(|d| Mark::new(d.start, d.end, false)));
+                let shown = Zeroizing::new(term::highlight(b.text(), &marks, self.color));
                 self.console.say(&format!("\n{}", *shown));
-                let cats: BTreeSet<String> = analysis
-                    .blocking
+                let cats: Vec<String> = b
+                    .categories()
                     .iter()
-                    .map(|d| format!("{} ({})", d.entity.as_str(), d.entity.gdpr_article().unwrap_or("Art. 9")))
+                    .map(|e| format!("{} ({})", e.as_str(), e.gdpr_article().unwrap_or("Art. 9")))
                     .collect();
                 self.console.say(&format!(
                     "⛔ BLOCKED: {}. The clipboard now holds a notice instead; this cannot be overridden.",
-                    cats.into_iter().collect::<Vec<_>>().join(", ")
+                    cats.join(", ")
                 ));
-                self.audit(Action::Blocked, analysis.blocking.iter().chain(&analysis.detections), chars);
             }
-            Verdict::Redact => return self.review(text, &analysis.detections),
+            Event::Reveal(o) => self.reveal(&o, true)?,
+            Event::Review(r) => return self.review(r),
         }
         Ok(Flow::Continue)
     }
 
     /// Show findings and replace the clipboard after confirmation.
-    fn review(&mut self, text: &str, detections: &[Detection]) -> Res<Flow> {
-        let chars = text.chars().count();
-        let mut keep = vec![true; detections.len()];
+    fn review(&mut self, mut r: Review) -> Res<Flow> {
         self.console.bell();
         loop {
-            let marks: Vec<Mark> = detections
-                .iter()
-                .zip(&keep)
-                .filter(|(_, k)| **k)
-                .map(|(d, _)| Mark::new(d.start, d.end, false))
-                .collect();
-            let shown = Zeroizing::new(term::highlight(text, &marks, self.color));
+            let marks: Vec<Mark> = r.selected().map(|d| Mark::new(d.start, d.end, false)).collect();
+            let shown = Zeroizing::new(term::highlight(r.text(), &marks, self.color));
             self.console.say(&format!("\n── Copied ──\n{}", *shown));
-            for (i, (d, k)) in detections.iter().zip(&keep).enumerate() {
+            for (i, (d, k)) in r.detections.iter().zip(&r.keep).enumerate() {
                 let line = Zeroizing::new(format!(
                     "  {:>2} {} {:<20} {:.2} {:?}",
                     i + 1,
                     if *k { "✓" } else { "·" },
                     d.entity.as_str(),
                     d.score,
-                    d.text(text)
+                    d.text(r.text())
                 ));
                 self.console.say(&line);
             }
-            let mark = self.vault.len();
-            let spans = detections.iter().zip(&keep).filter(|(_, k)| **k).map(|(d, _)| vault::Span {
-                start: d.start,
-                end: d.end,
-                kind: d.entity.as_str(),
-            });
-            let pseudonymized = self.vault.pseudonymize(text, spans)?;
-            self.console.say(&format!("── Pseudonymized ──\n{pseudonymized}"));
+            let preview = self.session.preview(&r)?;
+            self.console.say(&format!("── Pseudonymized ──\n{preview}"));
             let Some(a) = self.ask("Replace the clipboard? [Y/n], or numbers to toggle (e.g. 2,4), q = quit guard")
             else {
-                self.vault.rollback(mark);
                 return Ok(Flow::Quit);
             };
             match a.as_str() {
-                "" | "y" | "Y" | "j" | "J" | "yes" | "ja" => {
-                    let used: Vec<&Detection> =
-                        detections.iter().zip(&keep).filter(|(_, k)| **k).map(|(d, _)| d).collect();
-                    if used.is_empty() {
-                        self.vault.rollback(mark);
-                        self.console.say("  Nothing selected; clipboard unchanged.");
-                        self.audit(Action::Allowed, detections, chars);
-                    } else if self.write(text, &pseudonymized)? {
-                        self.console.say(&format!("  ✓ Clipboard pseudonymized ({} spans).", used.len()));
-                        self.audit(Action::Redacted, used, chars);
-                    } else {
-                        self.vault.rollback(mark);
-                    }
-                    return Ok(Flow::Continue);
-                }
+                "" => {}
+                a if is_yes(a) => {}
                 "n" | "N" | "no" | "nein" => {
-                    self.vault.rollback(mark);
+                    self.session.decline(&r);
                     self.console.say("  Clipboard unchanged.");
-                    self.audit(Action::Allowed, detections, chars);
                     return Ok(Flow::Continue);
                 }
-                "q" => {
-                    self.vault.rollback(mark);
-                    return Ok(Flow::Quit);
-                }
+                "q" => return Ok(Flow::Quit),
                 list => {
-                    self.vault.rollback(mark);
                     let mut ok = true;
                     for part in list.split([',', ' ']).filter(|p| !p.is_empty()) {
                         match part.parse::<usize>() {
-                            Ok(n) if (1..=keep.len()).contains(&n) => keep[n - 1] = !keep[n - 1],
+                            Ok(n) if (1..=r.keep.len()).contains(&n) => r.toggle(n - 1),
                             _ => ok = false,
                         }
                     }
                     if !ok {
-                        self.console.say(&format!("  Expected y, n, q or numbers from 1 to {}.", keep.len()));
+                        self.console.say(&format!("  Expected y, n, q or numbers from 1 to {}.", r.keep.len()));
                     }
+                    continue;
                 }
             }
+            let n = r.selected().count();
+            let outcome = self.session.confirm(&r)?;
+            self.report(outcome, &format!("  ✓ Clipboard pseudonymized ({n} spans)."));
+            return Ok(Flow::Continue);
         }
     }
 }
@@ -352,6 +283,7 @@ impl<B: ClipboardBackend, C: Console> Guard<'_, B, C> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use session::{AuditLog, BLOCK_NOTICE};
     use std::cell::RefCell;
     use std::collections::VecDeque;
     use std::rc::Rc;
@@ -401,19 +333,11 @@ mod tests {
     }
 
     fn run(steps: Vec<Step>, audit: Option<AuditLog>) -> (Shared, Vec<String>) {
-        let engine = Engine::new(Default::default()).unwrap();
+        let engine = detect::Engine::new(Default::default()).unwrap();
         let clip: Shared = Rc::new(RefCell::new(Some("start".into())));
-        let watcher = Watcher::new(SharedClipboard(clip.clone())).unwrap();
+        let session = Session::new(engine, SharedClipboard(clip.clone()), audit).unwrap();
         let console = Script { clip: clip.clone(), steps: steps.into(), out: Vec::new() };
-        let mut g = Guard {
-            engine: &engine,
-            watcher,
-            console,
-            vault: Vault::new(),
-            audit,
-            color: false,
-            interval: Duration::from_millis(1),
-        };
+        let mut g = Guard { session, console, color: false, interval: Duration::from_millis(1) };
         g.run().unwrap();
         (clip, g.console.out)
     }

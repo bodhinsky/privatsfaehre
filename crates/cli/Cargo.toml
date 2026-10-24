@@ -17,6 +17,7 @@ vault.workspace = true
 dataset.workspace = true
 ingest.workspace = true
 clip.workspace = true
+session.workspace = true
 clap.workspace = true
 serde.workspace = true
 serde_json.workspace = true
