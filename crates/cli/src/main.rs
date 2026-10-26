@@ -47,6 +47,11 @@ enum Cmd {
         #[arg(long)]
         audit_log: Option<PathBuf>,
     },
+    /// Print a `[ner]` config section with the SHA-256 pins for a GLiNER model directory.
+    NerConfig {
+        /// Directory with model.onnx, tokenizer.json and gliner_config.json.
+        dir: PathBuf,
+    },
     /// Show what would be redacted or blocked (review-mode preview).
     Scan {
         /// Input file (any supported format: txt, md, pdf, docx, odt, pptx, eml, mbox,
@@ -194,6 +199,20 @@ fn run(cli: Cli) -> Res {
                 interval: Duration::from_millis(interval_ms.max(50)),
             };
             g.run()?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Cmd::NerConfig { dir } => {
+            let dir = dir.canonicalize().map_err(|e| format!("{}: {e}", dir.display()))?;
+            let hash = |f: &str| {
+                let p = dir.join(f);
+                gliner::sha256_file(&p).map_err(|e| format!("{}: {e}", p.display()))
+            };
+            let (model, tok) = (hash("model.onnx")?, hash("tokenizer.json")?);
+            if !dir.join("gliner_config.json").is_file() {
+                return Err(format!("{}: gliner_config.json missing", dir.display()).into());
+            }
+            println!("[ner]\nmodel_dir = {:?}\nmodel_sha256 = \"{model}\"\ntokenizer_sha256 = \"{tok}\"", dir);
+            println!("# onnxruntime = \"/path/to/libonnxruntime.so\"  # default: ORT_DYLIB_PATH or the loader path");
             Ok(ExitCode::SUCCESS)
         }
         Cmd::Scan { file, column, json, candidates } => {

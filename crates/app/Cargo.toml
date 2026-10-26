@@ -23,8 +23,6 @@ vault.workspace = true
 clip.workspace = true
 session.workspace = true
 clap.workspace = true
-toml.workspace = true
-serde.workspace = true
 # No `links` (would open URLs in a browser), no `clipboard` (the app reads the
 # clipboard only through `clip`), no `accesskit` (would expose clipboard text to
 # the accessibility tree), glow instead of wgpu for a smaller tree.

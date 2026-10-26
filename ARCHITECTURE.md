@@ -117,6 +117,27 @@ Implementation notes:
   and its SHA-256 is pinned in the configuration.
 - Check the model card's license before bundling.
 
+Implemented in `crates/gliner` (feature `ner` of `session`, on by default):
+
+- Not `gline-rs`: it enables `ort`'s `download-binaries` and `tokenizers`'
+  `http` feature, both network clients. Our crate uses `ort` with
+  `load-dynamic` only and `tokenizers` without `http`/`hf-hub`.
+- Span mode (`markerV0`) only: words via GLiNER's splitter regex, prompt
+  `<<ENT>> label … <<SEP>> words`, `words_mask` marking each word's first
+  sub-token, all spans up to `max_width` words, sigmoid, greedy flat
+  decoding. Long texts run in overlapping word windows.
+- `model.onnx` and `tokenizer.json` are hashed (SHA-256) and compared with
+  the pins before ONNX Runtime is even loaded. `privatsphaere ner-config DIR`
+  prints the section with the pins.
+- Special-category prompts come from `default_gliner_labels()` and cannot be
+  replaced or re-scored from the configuration; NER detections then go
+  through the engine like any other, including the fixed special-category
+  threshold.
+- Tests: pre/post-processing unit tests, and an end-to-end run on ONNX Runtime
+  with a tiny synthetic model in `tests/fixtures/tiny` that has GLiNER's
+  signature (CI installs ONNX Runtime for it on Linux). Accuracy with a real
+  checkpoint has to be measured with `eval`.
+
 ## vault
 
 - Placeholders are `[KIND_n]`, numbered per kind in order of first appearance.

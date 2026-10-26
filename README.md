@@ -48,8 +48,32 @@ Personalausweis/Reisepass numbers (check digit), Kfz-Kennzeichen, dates, IP
 addresses, organisations with a legal-form suffix, API keys (OpenAI,
 Anthropic, AWS, GitHub, GitLab, Stripe, Slack, Google, …), private key
 blocks, JWTs, database connection strings, `.env` secrets, and the GDPR
-Art. 9/10 categories listed above. A local NER model (GLiNER via ONNX Runtime)
-is planned behind a pluggable trait; see [ARCHITECTURE.md](ARCHITECTURE.md).
+Art. 9/10 categories listed above. Optionally, a local GLiNER model on ONNX
+Runtime adds names, organisations, places and a second line of defence for
+Art. 9/10 (see "Local NER" below).
+
+## Local NER (optional)
+
+The rules miss names they have no cue for ("anna hat angerufen"). A GLiNER
+model fixes much of that. Nothing is downloaded by the program; you provide:
+
+1. ONNX Runtime 1.17 or newer as a shared library (`libonnxruntime.so`,
+   `libonnxruntime.dylib` or `onnxruntime.dll`, from the official release or
+   e.g. `pip install onnxruntime`, which ships it in `onnxruntime/capi/`).
+2. A GLiNER span model exported to ONNX, in one directory with
+   `model.onnx`, `tokenizer.json` and `gliner_config.json` (for example
+   `gliner_multi_pii-v1`, multilingual; check the model card's license).
+
+```sh
+$B ner-config /opt/models/gliner_multi_pii-v1 >> privatsphaere.toml   # pins SHA-256
+$B scan --config privatsphaere.toml notes.txt
+$B eval --config privatsphaere.toml dataset/public dataset/private        # measure before relying on it
+```
+
+The model and tokenizer must match the pinned hashes, otherwise nothing
+starts. If a configured model cannot be loaded, or fails on a text, the text
+is treated as blocked (fail closed). Prompts for the Art. 9/10 categories are
+fixed; `[ner] labels` can only change the ordinary ones.
 
 ## Quick start
 
@@ -149,6 +173,7 @@ Watch mode may only be enabled once the targets in
 | Crate | Purpose |
 |---|---|
 | `detect` | recognizers, NER trait, engine |
+| `gliner` | optional GLiNER backend on ONNX Runtime (loaded at run time) |
 | `vault` | placeholders, `reveal()`, zeroization |
 | `dataset` | JSONL/CSV/markup format, eval metrics |
 | `clip` | clipboard watcher |
@@ -220,8 +245,33 @@ Sozialversicherungsnummer (Prüfziffer), Personalausweis- und Passnummern
 Rechtsformzusatz, API-Schlüssel (OpenAI, Anthropic, AWS, GitHub, GitLab,
 Stripe, Slack, Google, …), private Schlüssel, JWTs, Datenbank-Verbindungs-
 strings, `.env`-Geheimnisse sowie die oben genannten Kategorien nach
-Art. 9/10. Ein lokales NER-Modell (GLiNER über ONNX Runtime) ist hinter einer
-austauschbaren Schnittstelle geplant, siehe [ARCHITECTURE.md](ARCHITECTURE.md).
+Art. 9/10. Optional ergänzt ein lokales GLiNER-Modell auf ONNX Runtime Namen,
+Organisationen, Orte und eine zweite Verteidigungslinie für Art. 9/10 (siehe
+„Lokale NER“).
+
+## Lokale NER (optional)
+
+Die Regeln übersehen Namen ohne Hinweiswort („anna hat angerufen“). Ein
+GLiNER-Modell schließt einen großen Teil dieser Lücke. Das Programm lädt nichts
+herunter; Sie stellen bereit:
+
+1. ONNX Runtime ab 1.17 als Bibliothek (`libonnxruntime.so`,
+   `libonnxruntime.dylib` oder `onnxruntime.dll`, aus dem offiziellen Release
+   oder z. B. per `pip install onnxruntime` in `onnxruntime/capi/`).
+2. Ein nach ONNX exportiertes GLiNER-Span-Modell in einem Verzeichnis mit
+   `model.onnx`, `tokenizer.json` und `gliner_config.json` (z. B.
+   `gliner_multi_pii-v1`, mehrsprachig; Lizenz auf der Modellkarte prüfen).
+
+```sh
+$B ner-config /opt/models/gliner_multi_pii-v1 >> privatsphaere.toml   # fixiert SHA-256
+$B scan --config privatsphaere.toml notizen.txt
+$B eval --config privatsphaere.toml dataset/public dataset/private        # erst messen, dann verlassen
+```
+
+Modell und Tokenizer müssen zu den fixierten Hashes passen, sonst startet
+nichts. Lässt sich ein konfiguriertes Modell nicht laden oder schlägt es bei
+einem Text fehl, gilt der Text als blockiert (fail closed). Die Prompts für die
+Kategorien nach Art. 9/10 sind fest; `[ner] labels` ändert nur die übrigen.
 
 ## Schnellstart
 
