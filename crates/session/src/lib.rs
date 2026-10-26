@@ -16,6 +16,7 @@
 //! [`Session::clear_vault`].
 
 pub mod audit;
+pub mod config;
 mod time;
 
 pub use audit::{Action, AuditLog};

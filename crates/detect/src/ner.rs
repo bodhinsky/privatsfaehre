@@ -3,8 +3,8 @@
 //! The engine treats a NER model as just another [`Recognizer`] via
 //! [`NerRecognizer`]. Backends implement [`NerModel`]; the recommended one is
 //! GLiNER (multilingual PII checkpoint) running on ONNX Runtime through the
-//! `ort` crate, see `ARCHITECTURE.md`. No backend is compiled in yet, so the
-//! crate stays dependency-light and the default build has no native code.
+//! `ort` crate, implemented in the separate `gliner` crate so this crate stays
+//! dependency-light.
 //!
 //! Model files are never downloaded by this program. Users place a model file
 //! on disk and point the configuration at it; its SHA-256 is pinned.

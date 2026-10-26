@@ -12,9 +12,7 @@ mod tray;
 mod ui;
 
 use clap::Parser;
-use detect::{Engine, EngineConfig};
 use eframe::egui;
-use serde::Deserialize;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::{Arc, Mutex};
@@ -34,27 +32,11 @@ struct Args {
     interval_ms: u64,
 }
 
-#[derive(Debug, Default, Deserialize)]
-struct FileConfig {
-    #[serde(default)]
-    detect: EngineConfig,
-}
-
-fn engine(path: Option<&std::path::Path>) -> Result<Engine, Box<dyn std::error::Error>> {
-    let cfg = match path {
-        Some(p) => {
-            let s = std::fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display()))?;
-            toml::from_str::<FileConfig>(&s).map_err(|e| format!("{}: {e}", p.display()))?.detect
-        }
-        None => EngineConfig::default(),
-    };
-    Ok(Engine::new(cfg)?)
-}
-
 fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     let t = i18n::detect();
     let audit = args.audit_log.as_deref().map(session::AuditLog::open).transpose()?;
-    let session = session::Session::new(engine(args.config.as_deref())?, clip::SystemClipboard::new()?, audit)?;
+    let session =
+        session::Session::new(session::config::engine(args.config.as_deref())?, clip::SystemClipboard::new()?, audit)?;
     let state: ui::State =
         Arc::new(Mutex::new(ui::Shared { session, pending: None, status: String::new(), quitting: false }));
     let interval = Duration::from_millis(args.interval_ms.max(50));

@@ -21,3 +21,14 @@ disabled_recognizers = []
 [detect.thresholds]
 DATE = 0.8
 URL = 0.9
+
+# Optional local NER (GLiNER on ONNX Runtime). Generate this section with
+#   privatsphaere ner-config /path/to/model-dir
+# [ner]
+# model_dir = "/opt/models/gliner_multi_pii-v1"
+# model_sha256 = "…"
+# tokenizer_sha256 = "…"
+# onnxruntime = "/usr/lib/libonnxruntime.so"
+# threshold = 0.3
+# Prompts for ordinary entities (special-category prompts are fixed):
+# labels = [{ label = "person", entity = "PERSON", min_score = 0.3 }]

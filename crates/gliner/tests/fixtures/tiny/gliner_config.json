@@ -1,0 +1,6 @@
+{
+ "max_width": 12,
+ "ent_token": "<<ENT>>",
+ "sep_token": "<<SEP>>",
+ "span_mode": "markerV0"
+}
