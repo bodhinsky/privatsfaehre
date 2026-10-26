@@ -1,6 +1,5 @@
 //! `privatsphaere` command-line tool.
 
-mod audit;
 mod config;
 mod guard;
 mod inputs;
@@ -186,14 +185,11 @@ fn run(cli: Cli) -> Res {
     let engine = || config::engine(cli.config.as_deref());
     match cli.cmd {
         Cmd::Guard { interval_ms, audit_log } => {
-            let engine = engine()?;
-            let watcher = clip::Watcher::new(clip::SystemClipboard::new()?)?;
+            let audit = audit_log.as_deref().map(session::AuditLog::open).transpose()?;
+            let session = session::Session::new(engine()?, clip::SystemClipboard::new()?, audit)?;
             let mut g = guard::Guard {
-                engine: &engine,
-                watcher,
+                session,
                 console: guard::Terminal::new(),
-                vault: vault::Vault::new(),
-                audit: audit_log.as_deref().map(audit::AuditLog::open).transpose()?,
                 color,
                 interval: Duration::from_millis(interval_ms.max(50)),
             };

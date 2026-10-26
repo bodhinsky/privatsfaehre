@@ -18,7 +18,8 @@ crates/
   clip     clipboard watcher (arboard backend)
   ingest   text extraction: PDF, Office, ODF, e-mail, spreadsheets, CSV, JSON, HTML, RTF
   cli      `privatsphaere` binary: guard, scan, label, eval -> detect, vault, dataset, ingest, clip
-  app      tray UI (placeholder)                     -> detect, vault, clip
+  session  review-mode rules, audit log              -> detect, vault, clip
+  app      desktop window + tray icon (egui)         -> session
 dataset/   public (synthetic, in CI) and private (git-ignored) samples
 scripts/   check-offline.sh, accuracy-gate.sh
 ```
@@ -33,15 +34,16 @@ clipboard change ─► clip::Watcher ─► detect::Engine::analyze
                                         │
              ┌──────────────────────────┼──────────────────────────┐
          Verdict::Clean           Verdict::Redact            Verdict::Block
-         leave as is        vault.pseudonymize(spans)    leave clipboard untouched*,
-                            review: show diff, confirm   show warning naming the
-                            watch: replace clipboard     category (Art. 9/10)
+         leave as is        vault.pseudonymize(spans)    replace clipboard with a
+                            review: show diff, confirm   notice*, show warning naming
+                            watch: replace clipboard     the category (Art. 9/10)
 
 LLM answer copied ─► user triggers "Reveal" ─► vault.reveal() ─► clipboard
 ```
 
-\* In watch mode the clipboard is replaced by a short notice so the text cannot
-be pasted by accident; the user can restore the original locally from the tray.
+\* In both modes, without asking, so the text cannot be pasted by accident.
+There is no override; the original is still in the application it was copied
+from.
 
 **Fail closed:** any detection error (for example a NER model failure) is
 treated like a block. `Recognizer::detect` returns `Result` for that reason.
@@ -151,7 +153,15 @@ platform change notifications (macOS change count, Windows
 `AddClipboardFormatListener`, X11 XFixes, Wayland data-control) can replace
 polling later.
 
-## app: recommendation
+## session
+
+The review-mode decisions live in one place so the terminal and the window
+cannot drift apart: `Session::poll` returns an `Event` (clean, review, blocked,
+failed, reveal offer). Block and failure write the notice before any UI sees
+the event; `preview` pseudonymizes and rolls back; `confirm` and
+`accept_reveal` write only if the clipboard still holds what was analysed.
+
+## app
 
 **`egui`/`eframe` plus `tray-icon`, not Tauri.**
 
@@ -165,6 +175,19 @@ polling later.
 Costs: less polished look than web UI, and `tray-icon` needs GTK and
 libappindicator on Linux.
 
+Implementation:
+
+- A background thread polls the clipboard and stores pending decisions in
+  shared state, then raises the window. Blocking does not depend on frames
+  being drawn, so it works while the window is minimised.
+- eframe is built without `links` (would open a browser), `clipboard` (egui's
+  own clipboard access) and `accesskit` (would expose clipboard text to the
+  accessibility tree), and with glow instead of wgpu.
+- On Linux the tray icon runs on its own GTK thread; elsewhere it is created on
+  the UI thread.
+- egui caches laid-out text (including originals) in memory it does not
+  zeroize; this is a known gap of the window compared to `guard`.
+
 ## Review mode and watch mode
 
 - Review mode (default): every clipboard change with findings opens the review
@@ -176,8 +199,7 @@ libappindicator on Linux.
 
 ## guard (terminal review mode)
 
-`privatsphaere guard` runs the data flow above in a terminal until the tray
-app exists. Stdin is read on a background thread, so commands (`r` reveal,
+`privatsphaere guard` runs the data flow above in a terminal. Stdin is read on a background thread, so commands (`r` reveal,
 `c` clear vault, `s` status, `q` quit) work while the clipboard is polled.
 Findings are pseudonymized into the vault for the preview; if the user
 declines, `Vault::rollback` removes those entries again. Writes use
@@ -187,7 +209,7 @@ copied text with this session's placeholders, defaulting to no.
 
 ## Audit log
 
-Opt-in (`guard --audit-log FILE`), local JSONL: timestamp, action (redacted,
+Opt-in (`--audit-log FILE` for `guard` and the app), local JSONL: timestamp, action (redacted,
 blocked, revealed, allowed, error), counts per entity type, rule ids, text
 length. Never original values, and no
 hashes of values either, since hashes of short values like phone numbers can
